@@ -25,7 +25,12 @@ import re
 import shutil
 from datetime import datetime
 
-SHARED_DIR = "/root/shared-agents"
+# Allow an override so tests/CI can run against a hermetic temp directory
+# instead of the live workspace. (PATH_PREFIX is the old gated name kept for
+# backward compat with any external caller.)
+SHARED_DIR = os.environ.get(
+    "ROSE_SHARED_DIR", "/root/shared-agents"
+)
 INBOX_DIR = os.path.join(SHARED_DIR, "inbox")
 ARCHIVE_DIR = os.path.join(SHARED_DIR, "archive")
 INDEX_PATH = os.path.join(ARCHIVE_DIR, "index.json")
@@ -221,7 +226,9 @@ def recall(keyword, scope="all"):
         return []
     index = _load_index()
     results = []
+    seen_entries = set()
     for entry in index:
+        eid = entry.get("id")
         paths = []
         if scope in ("all", "summary"):
             paths.append(entry.get("summary"))
@@ -232,17 +239,22 @@ def recall(keyword, scope="all"):
             if not fp or not os.path.isfile(fp):
                 continue
             try:
-                text = open(fp, encoding="utf-8").read().lower()
+                with open(fp, encoding="utf-8") as f:
+                    raw = f.read()
             except OSError:
                 continue
-            if keyword in text:
-                idx = text.find(keyword)
+            low = raw.lower()
+            if keyword in low and eid not in seen_entries:
+                seen_entries.add(eid)
+                # Extract the snippet from the ORIGINAL text so casing is
+                # preserved, but match case-insensitively.
+                idx = low.find(keyword)
                 start = max(0, idx - 80)
-                end = min(len(text), idx + 160)
+                end = min(len(raw), idx + 160)
                 results.append({
                     "entry": entry,
                     "file": os.path.basename(p),
-                    "snippet": text[start:end].strip(),
+                    "snippet": raw[start:end].strip(),
                 })
     return results
 

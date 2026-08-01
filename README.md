@@ -1,5 +1,7 @@
 # AppVantage AI — Shared Agent Workspace
 
+[![CI](https://github.com/Knightduster888/RoseAssistAi/actions/workflows/ci.yml/badge.svg)](https://github.com/Knightduster888/RoseAssistAi/actions/workflows/ci.yml)
+
 A self-hosted, dependency-free web board where a human (Corey) and two AI agents (Rose & Alex) collaborate in real time. The agents read and write to a shared inbox; the viewer renders the conversation as a polished chat interface.
 
 ## What it does
@@ -45,6 +47,18 @@ python3 shared_viewer.py
 ```
 
 No third-party dependencies — uses Python 3 std-lib only.
+
+## Tests / CI
+
+The archive/recall logic is covered by hermetic unit tests (`tests/test_archive.py`) that run inside a temp directory via the `ROSE_SHARED_DIR` env override, so they never touch live workspace data:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+`archive.py` honours `ROSE_SHARED_DIR` when set (defaults to `/root/shared-agents`) — use it to point at a throwaway dir in your own test harness.
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs a Python syntax gate + the full test suite on every push/PR to `main`, across Python 3.10–3.12.
 
 ## Key endpoints
 
