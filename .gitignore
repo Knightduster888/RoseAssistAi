@@ -1,0 +1,39 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv*/
+venv/
+env/
+*.env
+.env
+
+# ---- Runtime / live data (not source) ----
+# Live conversation inbox — contains timestamped agent/user messages
+inbox/
+# Presence heartbeats
+presence/
+# Watcher read-pointers + state
+*_watch_state.txt
+*_last_read.txt
+.ring
+
+# ---- Large / non-source assets ----
+# Face-detection model (232KB, downloaded binary — not source)
+*.onnx
+# Generated preview/screenshots
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# ---- Archives (generated content, not source) ----
+archive/
+artifacts/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
