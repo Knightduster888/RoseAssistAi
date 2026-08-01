@@ -22,6 +22,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 
 import presence  # local module: agent presence/typing heartbeats
 
@@ -40,7 +41,7 @@ _LAST_FIRED = {}
 _LOCK = threading.Lock()
 
 
-def _one_shot(profile, newest_file, subject, preview):
+def _one_shot(profile, newest_file, subject, preview, dest_file):
     """Spawn a single background hermes run for `profile` to engage the newest
     user message. Runs detached (setsid, stdout to a log) so it survives the
     viewer process and doesn't block the HTTP response.
@@ -52,30 +53,35 @@ def _one_shot(profile, newest_file, subject, preview):
     presence_agent = "alex" if profile == "apk" else "rose"
     spawn_iso = presence.set_presence(presence_agent, "thinking")
     profile_author = presence_agent
+
+    # Explicit source + destination paths let the agent reply in exactly two
+    # file operations (one read, one write) instead of wandering the directory.
+    src_path = os.path.join(INBOX_DIR, newest_file)
+    # dest_file is the caller-chosen timestamped name (e.g. 20260802_HHMMSS_from-rose.md)
+    dest_path = os.path.join(INBOX_DIR, dest_file)
+    display_name = "Alex (A.P.K.)" if profile_author == "alex" else "Rose"
+
     prompt = (
-        f"A new message from the user Corey just arrived in the shared inter-agent "
-        f"inbox. Newest file: {newest_file}. Subject: {subject}. Core content: {preview}\n\n"
-        "Read the newest message in /root/shared-agents/inbox/ (source of truth), and then "
-        f"respond to Corey directly as your persona, as a real conversational reply addressed "
-        f"to him.\n\n"
-        f"CRITICAL DELIVERY INSTRUCTION: Write your reply into the shared inbox as a new markdown "
-        f"file at /root/shared-agents/inbox/ so the web viewer can display it in the chat page. "
-        f'Use this exact format for the file: a timestamped name like 20260802_HHMMSS_from-{profile_author}.md '
-        f"and this body structure,\n"
-        f"# <your reply subject line>\n"
-        f"From: {'Alex (A.P.K.)' if profile_author=='alex' else 'Rose'}\n"
+        f"New message from the user Corey has just landed in the shared agent inbox.\n\n"
+        f"SOURCE: read ONLY this file: {src_path}\n\n"
+        f"Then reply to Corey as {display_name} with a short, warm, natural reply "
+        f"to exactly what he said.{' Address him as a mate (Aussie tone).' if profile_author=='alex' else ''}\n\n"
+        f"WRITE BACK: put your reply in this exact new file: {dest_path}\n"
+        f"Write the file with this exact body (these headers verbatim):\n"
+        f"# <your subject>\n"
+        f"From: {display_name}\n"
         f"To: Corey\n"
-        f"Date: <current date>\n\n"
-        f"<your conversational reply to Corey>.\n"
-        f"Keep it natural, warm, and concise. Your reply must be written into the inbox file as "
-        f"described so it appears in the viewer chat — do not reply only via Telegram. The final "
-        f"output of this run (which goes to Telegram) can simply be a one-line confirmation that "
-        f"you've replied in the inbox."
+        f"Date: <current date>\n"
+        f"\n"
+        f"<your reply — 2 to 4 sentences, conversational>\n\n"
+        f"Do NOT explore the inbox or list directories. Read the SOURCE file, "
+        f"then write the WRITE BACK file. That's it. No other tool calls. "
+        f"When done, output a single line confirming the filename you wrote."
     )
     log = f"/tmp/realtime_{profile}.log"
     cmd = (
         f"{shlex.quote(HERMES_BIN)} --profile {profile} chat -q {shlex.quote(prompt)} "
-        f"--source realtime-inbox >> {log} 2>&1"
+        f"-t file --source realtime-inbox --yolo >> {log} 2>&1"
     )
     try:
         # setsid detaches so the child is its own session leader and survives
@@ -145,13 +151,17 @@ def trigger_agents(target="both"):
 
     fired = []
     now = time.monotonic()
+    # One shared timestamp so both agents' reply files group nicely.
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     for profile in profiles:
         with _LOCK:
             last = _LAST_FIRED.get(profile, 0.0)
             if now - last < _COOLDOWN_S:
                 continue  # a run for this agent just went out; let it finish
             _LAST_FIRED[profile] = now  # record firing time (released by time)
-        if _one_shot(profile, newest, subject, preview):
+        author = "alex" if profile == "apk" else "rose"
+        dest_file = f"{stamp}_from-{author}.md"
+        if _one_shot(profile, newest, subject, preview, dest_file):
             fired.append(profile)
         else:
             with _LOCK:
